@@ -4,8 +4,8 @@ ugly code.
 
 
 run it: ./mix.rb
-then press <enter> (or <return>) when it lands on a "g"
-the sooner the better, but if you fail to get a 'g'
+then press <enter> (or <return>) when it lands on a "green"
+the sooner the better, but if you fail to get a 'green'
 then suffer for your lack of timing...
 
 :-)
