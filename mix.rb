@@ -21,6 +21,9 @@ class StdUi
   end
 
   def print(message="", options={})
+    if !! options[:number_of_characters_to_backup]
+      STDOUT.print(backup_the_cursor(options[:number_of_characters_to_backup]))
+    end
     pre_color = post_color = ANSI_LOOKUP[options[:color]]
     STDOUT.print("#{pre_color}#{message}#{post_color}")
   end
@@ -35,6 +38,13 @@ class StdUi
 
   def gets
     STDIN.gets
+  end
+
+
+  private
+
+  def backup_the_cursor(number_of_characters)
+    ANSI_BACKUP_FMT % number_of_characters
   end
 end
 
