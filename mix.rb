@@ -52,12 +52,27 @@ class Mixer
   require 'timeout'
 
   INITIAL_POINTS = 100
+  # how many of those points to keep (based on what user lands on):
+  FILL_OPTION_PERCENTAGES =  {red: 33.3, orange: 67.2, yellow: 82.3, green: 100.0 }
+
+  FILL_OPTIONS = [:red, :orange, :yellow, :green ]
+  # go through colors forward and backward, but don't double-up on green:
+  COLOR_CYCLE = FILL_OPTIONS + FILL_OPTIONS.reverse[1..-1]
+
+  RED = FILL_OPTIONS.first
   DEFAULT_UI = StdUi.new
-  FILL_OPTIONS = [:red, :orange, :yellow, :green, :yellow, :orange, :red]
-  FILL_OPTION_PERCENTAGES =  {red: 33.3, orange: 67.2, yellow: 82.3, green: 100 }
-  TOO_FAST_TIMES = [0.036, 0.04, 0.031]
-  FAST_TIMES = [0.043, 0.047, 0.050]
-  SLOW_TIMES = [0.051, 0.052, 0.053]
+
+  # magic-number(s): trial and error to pick the speed at which these options fly-by
+  TOO_FAST_TIMES = [0.033, 0.038, 0.042, 0.045]
+  FAST_TIMES = [0.083, 0.097, 0.1, 0.099]
+   SLOW_TIMES = [0.11, 0.23, 0.31, 0.30]
+
+  # magic-number(s): when to quit the infinite loop: 99 happened to land on red; 3 because 1-time was too quick
+  MAXIMUM_NUMBER_OF_COLORS_TO_PRESENT = 99 * 3
+
+  # magic-number(s)
+  SECONDS_BEFORE_WE_START_DISCOUNTING_POINTS = 1.38 # seems long enough
+  PER_SECOND_POINT_DISCOUNT_RATES = [3.13, 2.47] #?
 
   def self.mix(options={})
     new(options).mix
@@ -65,68 +80,70 @@ class Mixer
 
   def initialize(options={})
     @ui = options[:ui] || DEFAULT_UI
-    generate_fill_intervals
   end
 
   def enumerator
-    color_enumerator = FILL_OPTIONS.cycle
-    final_sleep_time_enumerator = SLOW_TIMES.cycle
+    color_enumerator = COLOR_CYCLE.cycle
     Enumerator.new do |yielder|
-      @fill_intervals.each do |sleep_time|
-        yielder.yield([color_enumerator.next, sleep_time])
+      COLOR_CYCLE.size.times do
+        yielder.yield([color_enumerator.next, TOO_FAST_TIMES.sample])
+      end
+
+      3.times do
+        COLOR_CYCLE.size.times do
+          yielder.yield([color_enumerator.next, FAST_TIMES.sample])
+        end
       end
 
       # allow this enumerator to continue forever:
       loop do
-        yielder.yield([color_enumerator.next, final_sleep_time_enumerator.next])
+        yielder.yield([color_enumerator.next, SLOW_TIMES.sample])
       end
     end
-  end
-
-  def generate_fill_intervals
-    # TODO:
-    # slow down a bit every 3sec, do that for 15 seconds, then default pour. score drops by 25% starting in the (1 (super fast),2 (reasonably fast)) 3rd interval (same ...leaving 75),
-    # and continuing in the 4th (again leaving 50), 5th (slower leaving 25%) -- no 0 score.
-    @fill_intervals = []
-    (FILL_OPTIONS.size * 2).times { @fill_intervals << TOO_FAST_TIMES.sample }
-    (FILL_OPTIONS.size * 2).times { @fill_intervals << FAST_TIMES.sample } # still 100%
-
-    (FILL_OPTIONS.size * 2).times { @fill_intervals << FAST_TIMES.sample } # now 75%
-    (FILL_OPTIONS.size * 2).times { @fill_intervals << FAST_TIMES.sample } # now 50%
-
-    (FILL_OPTIONS.size * 2).times { @fill_intervals << SLOW_TIMES.sample } # now 25% ...and done
-    @fill_intervals.flatten
   end
 
   def mix
     start_time = Time.now.to_f
     points = INITIAL_POINTS
-    color = FILL_OPTIONS.last
+    color = RED
     stopped = false
     e = enumerator
-    loop_idx = 0
-    reset_interval = FILL_OPTIONS.size
-    last_reset = -reset_interval
+    number_of_colors_presented = 0
+    previous_color_length = 0
+    number_of_colors_presented_when_last_reversed = 0
+    reverse_display = false
+    @ui.reset
 
     while !stopped do
-      loop_idx += 1
+      # erase what was written before (leaving cursor where it is):
       @ui.clear
-      if (loop_idx - last_reset) >= reset_interval
-        last_reset = loop_idx
-        @ui.reset
+
+      # after displaying a full cycle of colors: L->R
+      # display the next cycle walking backward: L<-R
+      if (number_of_colors_presented - number_of_colors_presented_when_last_reversed) >= COLOR_CYCLE.length
+        number_of_colors_presented_when_last_reversed = number_of_colors_presented
+        reverse_display = !reverse_display # toggle
       end
 
-      if loop_idx >= 99 * 3
-        color = FILL_OPTIONS.last
+      if number_of_colors_presented >= MAXIMUM_NUMBER_OF_COLORS_TO_PRESENT
+        color = RED
         break
       end
 
       begin
         color, remaining_sleep = e.next
-      rescue StopIteration # not presently using this, given the infinite loop
+      rescue StopIteration # not presently using this, given the infinite loop in the enumerator
         break
       end
-      @ui.print color, color: color
+      options = { color: color }
+      # currently reversed or newly-toggled:
+      if reverse_display || (number_of_colors_presented_when_last_reversed == number_of_colors_presented)
+        options.merge!(number_of_characters_to_backup: color.to_s.length + previous_color_length )
+        previous_color_length = color.to_s.length
+      else
+        previous_color_length = 0
+      end
+      @ui.print color, options
       stopped = false
       begin
         Timeout::timeout(remaining_sleep) do
@@ -135,14 +152,26 @@ class Mixer
       rescue Timeout::Error
         stopped = false
       end
+      number_of_colors_presented += 1
     end
 
     end_time = Time.now.to_f
     elapsed_time = end_time - start_time
-    points -= ([3.13, 2.47].sample * elapsed_time) if elapsed_time > 1.1 # magic-number(s): give 'em a second before we discount their score
-    points *= (Float(FILL_OPTION_PERCENTAGES[color]) / 100) # number_to_percentage
+    points = points - random_point_discount_based_on(elapsed_time) if elapsed_time > SECONDS_BEFORE_WE_START_DISCOUNTING_POINTS
+    points = points * percentage_of_points_to_keep_based_on_selected(color)
     @ui.puts "\nAfter #{elapsed_time}s you landed on: #{color} for #{points} points", color: color
     return color
+  end
+
+  private
+
+  def random_point_discount_based_on(elapsed_time)
+    PER_SECOND_POINT_DISCOUNT_RATES.sample * elapsed_time
+  end
+
+  # discount points based on the selected color's weight
+  def percentage_of_points_to_keep_based_on_selected(color)
+    Float(FILL_OPTION_PERCENTAGES[color]) / 100
   end
 end
 
