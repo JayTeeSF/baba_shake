@@ -103,17 +103,25 @@ class Mixer
   end
 
   def mix
-    start_time = Time.now.to_f
-    points = INITIAL_POINTS
-    color = RED
-    stopped = false
     e = enumerator
+    @ui.reset
+    reverse_display = false
+    points = INITIAL_POINTS
+    stopped = false
+
     number_of_colors_presented = 0
     previous_color_length = 0
     number_of_colors_presented_when_last_reversed = 0
-    reverse_display = false
-    @ui.reset
 
+    # start in middle of screen on green
+    3.times {
+      color, remaining_sleep = e.next
+      @ui.print color
+      number_of_colors_presented += 1
+    }
+
+    color = RED
+    start_time = Time.now.to_f
     while !stopped do
       # erase what was written before (leaving cursor where it is):
       @ui.clear
