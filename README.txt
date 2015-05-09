@@ -3,7 +3,15 @@ output: colored ascii
 code: meh
 
 
-run it: ./mix.rb
+compile it:
+# osx:
+go build mix.go
+# assuming you already: brew install go --with-cc-common
+# then: brew reinstall go --with-cc-common
+# windows:
+GOOS=windows GOARCH=386 go build -o mix.exe mix.go
+
+run it: ./mix # alernatively ./mix.rb
 then press <enter> (or <return>) when it lands on a "green"
 the sooner the better, but if you fail to get a 'green'
 then suffer for your lack of timing...
