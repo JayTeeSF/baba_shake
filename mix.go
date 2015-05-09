@@ -204,4 +204,7 @@ func main() {
 	}
 	points = points * percentage_of_points_to_keep_based_on_selected(color)
 	ui_puts(fmt.Sprintf("\nAfter %fs you landed on: %s for %f points", elapsed_time.Seconds(), color.name, points), ui_options{color: color})
+	// allow terminal to stay open, while user looks at output
+	var input string
+	fmt.Scanln(&input)
 }
