@@ -24,7 +24,7 @@ Initially we played like that: aiming to get the most points
 Then, my son started trying to see who could click the fastest
 Playing for the fastest "time" was a lot more fun
 
-And thanks to my son's feedback, I made our new alternation a more natural fit,
+And thanks to my son's feedback, I made our new alteration a more natural fit,
 I adjusted the code to start on Green
 
 ...But, of course, having green up-against the left edge of the screen wasn't good
